@@ -354,18 +354,19 @@ p.page-sub {
   flex: 1;
   border: none;
   background: none;
-  padding: 9px 2px 7px;
+  padding: 8px 1px 6px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 2px;
   color: var(--text-dim);
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 600;
   cursor: pointer;
   min-width: 0;
+  white-space: nowrap;
 }
-.nav-btn svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 5.5; stroke-linecap: round; stroke-linejoin: round; }
+.nav-btn svg { width: 19px; height: 19px; stroke: currentColor; fill: none; stroke-width: 5.5; stroke-linecap: round; stroke-linejoin: round; }
 .nav-btn.active { color: var(--accent-b); }
 
 /* ---------- Modal (exercise detail) ---------- */
@@ -639,3 +640,36 @@ p.page-sub {
   font-size: 12px;
 }
 .empty-meal { font-size: 13px; color: var(--text-dim); padding: 6px 2px; }
+
+/* ---------- Reminders tab ---------- */
+.quick-add-row { margin-bottom: 10px; }
+.quick-add-row .btn { width: 100%; }
+.reminder-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  margin-bottom: 10px;
+}
+.reminder-icon {
+  width: 42px; height: 42px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+.reminder-card .info { flex: 1; min-width: 0; }
+.reminder-card .name { font-weight: 700; font-size: 14.5px; }
+.reminder-card .schedule { font-size: 12px; color: var(--accent-a); font-weight: 600; margin-top: 2px; }
+.reminder-card .note { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+.reminder-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+
+/* ---------- Supplements (Learn tab) ---------- */
+.supplement-card .sup-row { font-size: 12.5px; color: var(--text-dim); line-height: 1.5; margin-top: 8px; }
+.supplement-card .sup-row.caution { color: var(--danger); }
+.supplement-card .sup-lbl { font-weight: 800; text-transform: uppercase; letter-spacing: .03em; font-size: 10.5px; color: var(--accent-a); display: block; margin-bottom: 2px; }
+.supplement-card .sup-row.caution .sup-lbl { color: var(--danger); }

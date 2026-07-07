@@ -3,7 +3,7 @@
    ========================================================================== */
 
 /* ---------------- Storage helpers ---------------- */
-const STORE_KEYS = { PROGRESS: "dg_progress", SETTINGS: "dg_settings", FOODLOG: "dg_foodlog" };
+const STORE_KEYS = { PROGRESS: "dg_progress", SETTINGS: "dg_settings", FOODLOG: "dg_foodlog", REMINDERS: "dg_reminders" };
 
 function loadJSON(key, fallback) {
   try {
@@ -19,6 +19,7 @@ let progress = loadJSON(STORE_KEYS.PROGRESS, {});
 let settings = loadJSON(STORE_KEYS.SETTINGS, { darkMode: false, unit: "lb", restLength: 60, calorieGoal: 2000 });
 if (!settings.calorieGoal) settings.calorieGoal = 2000;
 let foodLog = loadJSON(STORE_KEYS.FOODLOG, {});
+let reminders = loadJSON(STORE_KEYS.REMINDERS, []);
 
 function dateKey(d) {
   const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, "0"), day = String(d.getDate()).padStart(2, "0");
@@ -117,8 +118,124 @@ function suggestMealType() {
   return "snack";
 }
 
+/* ---------------- Reminders ---------------- */
+const REMINDER_TYPE_META = {
+  water: { icon: "💧", label: "Drink Water", defaultBody: "Time for a glass of water." },
+  medicine: { icon: "💊", label: "Medicine", defaultBody: "Time to take your medicine." },
+  supplement: { icon: "🧪", label: "Supplement", defaultBody: "Time to take your supplement." }
+};
+
+function saveReminders() { saveJSON(STORE_KEYS.REMINDERS, reminders); }
+
+function addReminder(r) {
+  r.id = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  r.enabled = true;
+  r.lastFiredDate = null;
+  r.lastFiredAt = 0;
+  reminders.push(r);
+  saveReminders();
+}
+function removeReminder(id) {
+  reminders = reminders.filter(r => r.id !== id);
+  saveReminders();
+}
+function toggleReminderEnabled(id) {
+  const r = reminders.find(r => r.id === id);
+  if (r) { r.enabled = !r.enabled; saveReminders(); }
+}
+
+function pad2(n) { return String(n).padStart(2, "0"); }
+function timeToMinutes(t) { const [h, m] = t.split(":").map(Number); return h * 60 + m; }
+function formatTimeLabel(t) {
+  const [h, m] = t.split(":").map(Number);
+  const period = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${pad2(m)} ${period}`;
+}
+function scheduleLabel(r) {
+  if (r.mode === "daily") return `Daily at ${formatTimeLabel(r.time)}`;
+  return `Every ${r.everyHours}h, ${formatTimeLabel(r.startTime)}–${formatTimeLabel(r.endTime)}`;
+}
+
+/* ---------------- Notifications ---------------- */
+function notifSupported() { return "Notification" in window; }
+function notifPermission() { return notifSupported() ? Notification.permission : "unsupported"; }
+function requestNotifPermission() {
+  if (!notifSupported()) { showToast("Notifications aren't supported on this browser"); return; }
+  Notification.requestPermission().then(() => renderRemind());
+}
+
+let audioCtx = null;
+function playBeep() {
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    [0, 0.18].forEach((delay, i) => {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = i === 0 ? 880 : 1046;
+      gain.gain.setValueAtTime(0.0001, audioCtx.currentTime + delay);
+      gain.gain.exponentialRampToValueAtTime(0.25, audioCtx.currentTime + delay + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + delay + 0.3);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start(audioCtx.currentTime + delay);
+      osc.stop(audioCtx.currentTime + delay + 0.3);
+    });
+  } catch (e) { /* audio not available */ }
+}
+
+function fireReminder(r) {
+  const meta = REMINDER_TYPE_META[r.type];
+  const title = r.type === "water" ? "Drink Water 💧" : `${meta.icon} ${r.label}`;
+  const body = r.type === "water" ? meta.defaultBody : (r.note ? r.note : meta.defaultBody);
+
+  if (notifSupported() && Notification.permission === "granted") {
+    try { new Notification(title, { body, icon: "icons/icon-192.png", tag: r.id }); } catch (e) { /* ignore */ }
+  }
+  if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+  playBeep();
+  showToast(`${meta.icon} ${title.replace(meta.icon, "").trim()}`);
+}
+
+function checkReminders() {
+  const now = new Date();
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const today = todayKey();
+  let changed = false;
+
+  reminders.forEach(r => {
+    if (!r.enabled) return;
+    if (r.mode === "daily") {
+      const targetMin = timeToMinutes(r.time);
+      if (Math.abs(nowMinutes - targetMin) <= 1 && r.lastFiredDate !== today) {
+        fireReminder(r);
+        r.lastFiredDate = today;
+        changed = true;
+      }
+    } else if (r.mode === "interval") {
+      const startMin = timeToMinutes(r.startTime);
+      const endMin = timeToMinutes(r.endTime);
+      const withinWindow = nowMinutes >= startMin && nowMinutes <= endMin;
+      if (!withinWindow) return;
+      const elapsedMs = Date.now() - (r.lastFiredAt || 0);
+      const lastFiredWasToday = r.lastFiredDate === today;
+      const intervalMs = r.everyHours * 60 * 60 * 1000;
+      const dueForCatchUp = !lastFiredWasToday; // first trigger of the day within window
+      const dueByInterval = lastFiredWasToday && elapsedMs >= intervalMs;
+      if (dueForCatchUp || dueByInterval) {
+        fireReminder(r);
+        r.lastFiredAt = Date.now();
+        r.lastFiredDate = today;
+        changed = true;
+      }
+    }
+  });
+
+  if (changed) saveReminders();
+}
+
 /* ---------------- View switching ---------------- */
-const views = ["today", "diet", "week", "library", "learn", "settings"];
+const views = ["today", "diet", "remind", "week", "library", "learn", "settings"];
 function switchView(name) {
   views.forEach(v => {
     document.getElementById(`view-${v}`).classList.toggle("active", v === name);
@@ -128,6 +245,7 @@ function switchView(name) {
   });
   if (name === "today") renderToday();
   if (name === "diet") renderDiet();
+  if (name === "remind") renderRemind();
   if (name === "week") renderWeek();
   if (name === "library") renderLibrary();
   if (name === "learn") renderLearn();
@@ -525,6 +643,145 @@ function openFoodQuantityStep(foodId) {
   draw();
 }
 
+/* ---------------- Reminders view ---------------- */
+function renderRemind() {
+  const permCard = document.getElementById("notifPermCard");
+  if (notifSupported() && Notification.permission !== "granted") {
+    permCard.style.display = "block";
+    document.getElementById("enableNotifBtn").onclick = requestNotifPermission;
+  } else {
+    permCard.style.display = "none";
+  }
+
+  const hasWater = reminders.some(r => r.type === "water");
+  document.getElementById("quickAddRow").innerHTML = hasWater ? "" : `
+    <button class="btn btn-secondary btn-sm" id="quickAddWater">💧 Quick add: Water every 2h (8am–9pm)</button>
+  `;
+  const quickBtn = document.getElementById("quickAddWater");
+  if (quickBtn) {
+    quickBtn.onclick = () => {
+      addReminder({ type: "water", label: "Drink Water", mode: "interval", everyHours: 2, startTime: "08:00", endTime: "21:00" });
+      showToast("Water reminder added");
+      renderRemind();
+    };
+  }
+
+  const list = document.getElementById("reminderList");
+  if (!reminders.length) {
+    list.innerHTML = `<div class="empty-state"><div class="emoji">⏰</div>No reminders yet. Add one above.</div>`;
+  } else {
+    list.innerHTML = reminders.map(r => {
+      const meta = REMINDER_TYPE_META[r.type];
+      return `
+        <div class="reminder-card">
+          <div class="reminder-icon">${meta.icon}</div>
+          <div class="info">
+            <div class="name">${r.label}</div>
+            <div class="schedule">${scheduleLabel(r)}</div>
+            ${r.note ? `<div class="note">${r.note}</div>` : ""}
+          </div>
+          <div class="reminder-actions">
+            <div class="switch ${r.enabled ? "on" : ""}" data-id="${r.id}"></div>
+            <button class="food-remove" data-del="${r.id}">✕</button>
+          </div>
+        </div>
+      `;
+    }).join("");
+    list.querySelectorAll(".switch").forEach(sw => {
+      sw.addEventListener("click", () => { toggleReminderEnabled(sw.dataset.id); renderRemind(); });
+    });
+    list.querySelectorAll("[data-del]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        if (confirm("Delete this reminder?")) { removeReminder(btn.dataset.del); renderRemind(); }
+      });
+    });
+  }
+
+  document.getElementById("openReminderModalBtn").onclick = openReminderModal;
+}
+
+/* ---------------- Reminder add modal ---------------- */
+function openReminderModal() {
+  let state = { type: "water", mode: "daily", time: "09:00", everyHours: 2, startTime: "08:00", endTime: "21:00", label: "", note: "" };
+
+  function draw() {
+    const content = document.getElementById("reminderModalContent");
+    const needsName = state.type !== "water";
+    content.innerHTML = `
+      <div class="modal-title">Add Reminder</div>
+
+      <div class="section-label" style="margin-top:8px;">Type</div>
+      <div class="filter-row" id="typeChips">
+        ${Object.keys(REMINDER_TYPE_META).map(t => `<div class="chip ${t === state.type ? "active" : ""}" data-t="${t}">${REMINDER_TYPE_META[t].icon} ${REMINDER_TYPE_META[t].label}</div>`).join("")}
+      </div>
+
+      ${needsName ? `
+        <div class="section-label">Name</div>
+        <input type="text" class="search-input" id="reminderNameInput" placeholder="e.g. Vitamin D, Blood pressure tablet" value="${state.label}">
+        <div class="section-label">Note (optional)</div>
+        <input type="text" class="search-input" id="reminderNoteInput" placeholder="e.g. 1 tablet with breakfast" value="${state.note}">
+      ` : ""}
+
+      <div class="section-label">Schedule</div>
+      <div class="filter-row" id="modeChips">
+        <div class="chip ${state.mode === "daily" ? "active" : ""}" data-m="daily">Once daily</div>
+        <div class="chip ${state.mode === "interval" ? "active" : ""}" data-m="interval">Repeat every few hours</div>
+      </div>
+
+      ${state.mode === "daily" ? `
+        <div class="section-label">Time</div>
+        <input type="time" class="search-input" id="dailyTimeInput" value="${state.time}">
+      ` : `
+        <div class="section-label">Every</div>
+        <div class="filter-row" id="hoursChips">
+          ${[1, 2, 3, 4].map(h => `<div class="chip ${h === state.everyHours ? "active" : ""}" data-h="${h}">${h}h</div>`).join("")}
+        </div>
+        <div class="section-label">Active window</div>
+        <div style="display:flex; gap:10px;">
+          <input type="time" class="search-input" id="startTimeInput" value="${state.startTime}">
+          <input type="time" class="search-input" id="endTimeInput" value="${state.endTime}">
+        </div>
+      `}
+
+      <button class="btn btn-primary btn-block" id="saveReminderBtn" style="margin-top:10px;">Save Reminder</button>
+    `;
+
+    content.querySelectorAll("#typeChips .chip").forEach(chip => {
+      chip.addEventListener("click", () => { state.type = chip.dataset.t; draw(); });
+    });
+    content.querySelectorAll("#modeChips .chip").forEach(chip => {
+      chip.addEventListener("click", () => { state.mode = chip.dataset.m; draw(); });
+    });
+    if (needsName) {
+      content.querySelector("#reminderNameInput").addEventListener("input", (e) => { state.label = e.target.value; });
+      content.querySelector("#reminderNoteInput").addEventListener("input", (e) => { state.note = e.target.value; });
+    }
+    if (state.mode === "daily") {
+      content.querySelector("#dailyTimeInput").addEventListener("input", (e) => { state.time = e.target.value; });
+    } else {
+      content.querySelectorAll("#hoursChips .chip").forEach(chip => {
+        chip.addEventListener("click", () => { state.everyHours = parseInt(chip.dataset.h, 10); draw(); });
+      });
+      content.querySelector("#startTimeInput").addEventListener("input", (e) => { state.startTime = e.target.value; });
+      content.querySelector("#endTimeInput").addEventListener("input", (e) => { state.endTime = e.target.value; });
+    }
+
+    content.querySelector("#saveReminderBtn").addEventListener("click", () => {
+      if (needsName && !state.label.trim()) { showToast("Please enter a name"); return; }
+      if (state.type === "water") state.label = "Drink Water";
+      addReminder({ type: state.type, label: state.label.trim(), note: state.note.trim(), mode: state.mode, time: state.time, everyHours: state.everyHours, startTime: state.startTime, endTime: state.endTime });
+      if (notifSupported() && Notification.permission === "default") requestNotifPermission();
+      showToast("Reminder added");
+      closeReminderModal();
+      renderRemind();
+    });
+  }
+
+  draw();
+  document.getElementById("reminderModalBackdrop").classList.add("open");
+}
+function closeReminderModal() { document.getElementById("reminderModalBackdrop").classList.remove("open"); }
+
 /* ---------------- Library view ---------------- */
 let activeMuscleFilter = "all";
 function renderLibrary() {
@@ -573,6 +830,16 @@ function renderLearn() {
     <div class="card learn-card">
       <div class="t">${g.title}</div>
       <div class="b">${g.text}</div>
+    </div>
+  `).join("");
+
+  const supList = document.getElementById("supplementsList");
+  supList.innerHTML = SUPPLEMENTS.map(s => `
+    <div class="card learn-card supplement-card">
+      <div class="t">${s.name}</div>
+      <div class="b">${s.benefit}</div>
+      <div class="sup-row"><span class="sup-lbl">Best time</span>${s.timing}</div>
+      <div class="sup-row caution"><span class="sup-lbl">Caution</span>${s.caution}</div>
     </div>
   `).join("");
 }
@@ -711,6 +978,11 @@ document.getElementById("foodModalBackdrop").addEventListener("click", (e) => {
   if (e.target.id === "foodModalBackdrop") closeFoodModal();
 });
 
+document.getElementById("reminderModalClose").addEventListener("click", closeReminderModal);
+document.getElementById("reminderModalBackdrop").addEventListener("click", (e) => {
+  if (e.target.id === "reminderModalBackdrop") closeReminderModal();
+});
+
 /* ---------------- Rest timer ---------------- */
 let restInterval = null;
 let restRemaining = 0;
@@ -752,3 +1024,9 @@ if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("service-worker.js").catch(() => {});
   });
 }
+
+/* Reminder scheduler — checks every 20s and once immediately, catching up
+   on anything due since the app was last opened. Only fires while this
+   page/tab is open; see the note on the Reminders tab for why. */
+checkReminders();
+setInterval(checkReminders, 20000);

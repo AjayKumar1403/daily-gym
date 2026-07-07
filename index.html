@@ -63,6 +63,26 @@
       <p class="disclaimer-note">Calories are approximate averages for typical home-style servings — actual values vary by recipe, oil/ghee used, and portion size.</p>
     </section>
 
+    <!-- REMINDERS VIEW -->
+    <section class="view" id="view-remind">
+      <h1 class="page-title">Reminders</h1>
+      <p class="page-sub">Water, medicine, and supplement reminders — while the app is open or running in the background.</p>
+
+      <div class="card" id="notifPermCard" style="display:none;">
+        <div class="lbl" style="font-weight:700; margin-bottom:6px;">Turn on notifications</div>
+        <p class="page-sub" style="margin:0 0 10px;">Allow notifications so reminders can pop up as an alert, not just show inside the app.</p>
+        <button class="btn btn-primary btn-block" id="enableNotifBtn">Enable Notifications</button>
+      </div>
+
+      <div class="quick-add-row" id="quickAddRow"></div>
+
+      <button class="btn btn-primary btn-block" id="openReminderModalBtn">+ Add Reminder</button>
+
+      <div id="reminderList"></div>
+
+      <p class="disclaimer-note">Reminders fire while Daily Gym is open (foreground or a recent background tab). Phones that fully close the app or lock aggressively may delay or skip alerts — this is a limitation of installable web apps without a push server, not a bug. Reopen the app to see anything you missed.</p>
+    </section>
+
     <!-- WEEK VIEW -->
     <section class="view" id="view-week">
       <h1 class="page-title">This Week</h1>
@@ -85,6 +105,11 @@
       <p class="page-sub">Breathing fundamentals and safety basics.</p>
       <div class="section-label">Breathing Guide</div>
       <div id="breathingGuideList"></div>
+
+      <div class="section-label">Common Supplements</div>
+      <p class="page-sub" style="margin-top:-8px;">Educational overview only — not medical advice. Check with a doctor or pharmacist before starting anything new, especially if you take medication or have a health condition.</p>
+      <div id="supplementsList"></div>
+
       <div class="section-label">Training Safety Basics</div>
       <div class="card">
         <ul class="safety-list">
@@ -189,6 +214,10 @@
         <svg viewBox="0 0 24 24"><path d="M6 2v8a3 3 0 0 0 3 3v9M6 2v6M9 2v6"/><path d="M18 2c-2 2-3 5-3 8s1 4 3 4v9"/></svg>
         Diet
       </button>
+      <button class="nav-btn" data-view="remind">
+        <svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+        Remind
+      </button>
       <button class="nav-btn" data-view="week">
         <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
         Week
@@ -226,11 +255,21 @@
     </div>
   </div>
 
+  <!-- Reminder add/edit modal -->
+  <div class="modal-backdrop" id="reminderModalBackdrop">
+    <div class="modal-sheet" id="reminderModalSheet" style="position:relative;">
+      <div class="modal-drag-handle"></div>
+      <button class="modal-close" id="reminderModalClose">✕</button>
+      <div id="reminderModalContent"></div>
+    </div>
+  </div>
+
 </div>
 
 <script src="data.js"></script>
 <script src="illustrations.js"></script>
 <script src="food-data.js"></script>
+<script src="supplements-data.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
