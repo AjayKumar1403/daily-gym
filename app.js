@@ -3,7 +3,7 @@
    ========================================================================== */
 
 /* ---------------- Storage helpers ---------------- */
-const STORE_KEYS = { PROGRESS: "dg_progress", SETTINGS: "dg_settings" };
+const STORE_KEYS = { PROGRESS: "dg_progress", SETTINGS: "dg_settings", FOODLOG: "dg_foodlog" };
 
 function loadJSON(key, fallback) {
   try {
@@ -16,7 +16,9 @@ function saveJSON(key, val) {
 }
 
 let progress = loadJSON(STORE_KEYS.PROGRESS, {});
-let settings = loadJSON(STORE_KEYS.SETTINGS, { darkMode: false, unit: "lb", restLength: 60 });
+let settings = loadJSON(STORE_KEYS.SETTINGS, { darkMode: false, unit: "lb", restLength: 60, calorieGoal: 2000 });
+if (!settings.calorieGoal) settings.calorieGoal = 2000;
+let foodLog = loadJSON(STORE_KEYS.FOODLOG, {});
 
 function dateKey(d) {
   const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, "0"), day = String(d.getDate()).padStart(2, "0");
@@ -73,8 +75,50 @@ function computeStreak() {
   return streak;
 }
 
+/* ---------------- Food log helpers ---------------- */
+function getFoodDayEntry(key) {
+  if (!foodLog[key]) foodLog[key] = { entries: [] };
+  return foodLog[key];
+}
+function addFoodEntry(key, food, mealType, multiplier) {
+  const entry = getFoodDayEntry(key);
+  entry.entries.push({
+    uid: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    foodId: food.id,
+    name: food.name,
+    serving: food.serving,
+    mealType,
+    multiplier,
+    cal: Math.round(food.cal * multiplier),
+    protein: +(food.protein * multiplier).toFixed(1),
+    carbs: +(food.carbs * multiplier).toFixed(1),
+    fat: +(food.fat * multiplier).toFixed(1)
+  });
+  saveJSON(STORE_KEYS.FOODLOG, foodLog);
+}
+function removeFoodEntry(key, uid) {
+  const entry = getFoodDayEntry(key);
+  entry.entries = entry.entries.filter(e => e.uid !== uid);
+  saveJSON(STORE_KEYS.FOODLOG, foodLog);
+}
+function dailyTotals(key) {
+  const entry = foodLog[key];
+  const list = entry ? entry.entries : [];
+  return list.reduce((acc, e) => {
+    acc.cal += e.cal; acc.protein += e.protein; acc.carbs += e.carbs; acc.fat += e.fat;
+    return acc;
+  }, { cal: 0, protein: 0, carbs: 0, fat: 0 });
+}
+function suggestMealType() {
+  const h = new Date().getHours();
+  if (h < 11) return "breakfast";
+  if (h < 16) return "lunch";
+  if (h < 21) return "dinner";
+  return "snack";
+}
+
 /* ---------------- View switching ---------------- */
-const views = ["today", "week", "library", "learn", "settings"];
+const views = ["today", "diet", "week", "library", "learn", "settings"];
 function switchView(name) {
   views.forEach(v => {
     document.getElementById(`view-${v}`).classList.toggle("active", v === name);
@@ -83,6 +127,7 @@ function switchView(name) {
     btn.classList.toggle("active", btn.dataset.view === name);
   });
   if (name === "today") renderToday();
+  if (name === "diet") renderDiet();
   if (name === "week") renderWeek();
   if (name === "library") renderLibrary();
   if (name === "learn") renderLearn();
@@ -299,6 +344,187 @@ function openDayPreview(dayIdx) {
   openModal();
 }
 
+/* ---------------- Diet view ---------------- */
+function renderDiet() {
+  const key = todayKey();
+  const totals = dailyTotals(key);
+  const goal = settings.calorieGoal;
+  const pct = Math.min(100, Math.round((totals.cal / goal) * 100));
+  const remaining = goal - totals.cal;
+
+  document.getElementById("calConsumed").textContent = totals.cal;
+  document.getElementById("calGoalLabel").textContent = goal;
+  document.getElementById("calProgressFill").style.width = `${pct}%`;
+  document.getElementById("calRemainingLabel").textContent = remaining >= 0
+    ? `${remaining} kcal remaining`
+    : `${Math.abs(remaining)} kcal over goal`;
+  document.getElementById("macroRow").innerHTML = `
+    <div class="macro-pill"><span class="v">${totals.protein.toFixed(0)}g</span><span class="l">Protein</span></div>
+    <div class="macro-pill"><span class="v">${totals.carbs.toFixed(0)}g</span><span class="l">Carbs</span></div>
+    <div class="macro-pill"><span class="v">${totals.fat.toFixed(0)}g</span><span class="l">Fat</span></div>
+  `;
+
+  const entry = foodLog[key];
+  const allEntries = entry ? entry.entries : [];
+
+  document.getElementById("mealSections").innerHTML = MEAL_TYPES.map(mt => {
+    const items = allEntries.filter(e => e.mealType === mt);
+    const subtotal = items.reduce((s, e) => s + e.cal, 0);
+    const itemsHtml = items.length
+      ? items.map(e => `
+          <div class="food-log-item" data-uid="${e.uid}">
+            <div class="info">
+              <div class="name">${e.name} <span class="mult">${e.multiplier}×</span></div>
+              <div class="serving">${e.serving}</div>
+            </div>
+            <div class="cal">${e.cal} kcal</div>
+            <button class="food-remove" data-uid="${e.uid}">✕</button>
+          </div>
+        `).join("")
+      : `<div class="empty-meal">No items logged yet.</div>`;
+    return `
+      <div class="card">
+        <div class="collapsible-head" style="cursor:default;">
+          <div><div class="title">${MEAL_LABELS[mt]}</div><div class="meta">${subtotal} kcal</div></div>
+          <button class="btn btn-secondary btn-sm" data-add-meal="${mt}">+ Add</button>
+        </div>
+        <div style="margin-top:8px;">${itemsHtml}</div>
+      </div>
+    `;
+  }).join("");
+
+  document.getElementById("mealSections").querySelectorAll("[data-add-meal]").forEach(btn => {
+    btn.addEventListener("click", () => openFoodPicker(btn.dataset.addMeal));
+  });
+  document.getElementById("mealSections").querySelectorAll(".food-remove").forEach(btn => {
+    btn.addEventListener("click", () => {
+      removeFoodEntry(key, btn.dataset.uid);
+      renderDiet();
+    });
+  });
+
+  document.getElementById("openFoodPickerBtn").onclick = () => openFoodPicker(suggestMealType());
+}
+
+/* ---------------- Food picker modal ---------------- */
+let foodPickerState = { mealType: "breakfast", cuisine: "all", query: "" };
+
+function openFoodPicker(mealType) {
+  foodPickerState = { mealType: mealType || suggestMealType(), cuisine: "all", query: "" };
+  renderFoodPickerList();
+  document.getElementById("foodModalBackdrop").classList.add("open");
+}
+function closeFoodModal() { document.getElementById("foodModalBackdrop").classList.remove("open"); }
+
+function renderFoodPickerList() {
+  const content = document.getElementById("foodModalContent");
+  content.innerHTML = `
+    <div class="modal-title">Add Food</div>
+    <div class="section-label" style="margin-top:8px;">Meal</div>
+    <div class="filter-row" id="pickerMealChips">
+      ${MEAL_TYPES.map(mt => `<div class="chip ${mt === foodPickerState.mealType ? "active" : ""}" data-mt="${mt}">${MEAL_LABELS[mt]}</div>`).join("")}
+    </div>
+    <input type="text" class="search-input" id="foodSearch" placeholder="Search foods..." value="${foodPickerState.query}">
+    <div class="filter-row" id="pickerCuisineChips">
+      <div class="chip ${foodPickerState.cuisine === "all" ? "active" : ""}" data-c="all">All</div>
+      ${CUISINES.map(c => `<div class="chip ${foodPickerState.cuisine === c ? "active" : ""}" data-c="${c}">${CUISINE_LABELS[c]}</div>`).join("")}
+    </div>
+    <div id="foodPickerResults"></div>
+  `;
+
+  content.querySelectorAll("#pickerMealChips .chip").forEach(chip => {
+    chip.addEventListener("click", () => { foodPickerState.mealType = chip.dataset.mt; renderFoodPickerList(); });
+  });
+  content.querySelectorAll("#pickerCuisineChips .chip").forEach(chip => {
+    chip.addEventListener("click", () => { foodPickerState.cuisine = chip.dataset.c; renderFoodResults(); });
+  });
+  const searchInput = content.querySelector("#foodSearch");
+  searchInput.addEventListener("input", () => { foodPickerState.query = searchInput.value; renderFoodResults(); });
+  searchInput.focus();
+
+  renderFoodResults();
+}
+
+function renderFoodResults() {
+  const results = document.getElementById("foodPickerResults");
+  const q = foodPickerState.query.trim().toLowerCase();
+  const filtered = FOODS.filter(f => {
+    const matchesCuisine = foodPickerState.cuisine === "all" || f.cuisine === foodPickerState.cuisine;
+    const matchesQuery = !q || f.name.toLowerCase().includes(q);
+    return matchesCuisine && matchesQuery;
+  });
+  if (!filtered.length) {
+    results.innerHTML = `<div class="empty-state"><div class="emoji">🍽️</div>No foods match.</div>`;
+    return;
+  }
+  results.innerHTML = filtered.map(f => `
+    <div class="food-item" data-id="${f.id}">
+      <div class="info">
+        <div class="name">${f.name}</div>
+        <div class="serving">${f.serving} · <span class="cuisine-tag">${CUISINE_LABELS[f.cuisine]}</span></div>
+      </div>
+      <div class="cal-badge">${f.cal}<span>kcal</span></div>
+    </div>
+  `).join("");
+  results.querySelectorAll(".food-item").forEach(el => {
+    el.addEventListener("click", () => openFoodQuantityStep(el.dataset.id));
+  });
+}
+
+function openFoodQuantityStep(foodId) {
+  const food = foodById(foodId);
+  const content = document.getElementById("foodModalContent");
+  let multiplier = 1;
+
+  function draw() {
+    content.innerHTML = `
+      <button class="btn btn-secondary btn-sm" id="foodBackBtn" style="margin-bottom:12px;">← Back</button>
+      <div class="modal-title">${food.name}</div>
+      <div class="modal-meta-row"><span class="tag">${food.serving}</span><span class="tag">${CUISINE_LABELS[food.cuisine]}</span><span class="tag">${food.category}</span></div>
+
+      <div class="section-label">Meal</div>
+      <div class="filter-row" id="qtyMealChips">
+        ${MEAL_TYPES.map(mt => `<div class="chip ${mt === foodPickerState.mealType ? "active" : ""}" data-mt="${mt}">${MEAL_LABELS[mt]}</div>`).join("")}
+      </div>
+
+      <div class="section-label">Portion</div>
+      <div class="filter-row" id="qtyChips">
+        ${[0.5, 1, 1.5, 2, 2.5, 3].map(m => `<div class="chip ${m === multiplier ? "active" : ""}" data-m="${m}">${m}×</div>`).join("")}
+      </div>
+
+      <div class="card" style="margin-top:6px;">
+        <div class="cal-summary">
+          <div class="cal-summary-num">${Math.round(food.cal * multiplier)}</div>
+          <div class="cal-summary-sub">kcal for ${multiplier}× serving</div>
+        </div>
+        <div class="macro-row">
+          <div class="macro-pill"><span class="v">${(food.protein * multiplier).toFixed(1)}g</span><span class="l">Protein</span></div>
+          <div class="macro-pill"><span class="v">${(food.carbs * multiplier).toFixed(1)}g</span><span class="l">Carbs</span></div>
+          <div class="macro-pill"><span class="v">${(food.fat * multiplier).toFixed(1)}g</span><span class="l">Fat</span></div>
+        </div>
+      </div>
+
+      <button class="btn btn-primary btn-block" id="confirmAddFoodBtn" style="margin-top:14px;">Add to ${MEAL_LABELS[foodPickerState.mealType]}</button>
+    `;
+
+    content.querySelector("#foodBackBtn").addEventListener("click", renderFoodPickerList);
+    content.querySelectorAll("#qtyMealChips .chip").forEach(chip => {
+      chip.addEventListener("click", () => { foodPickerState.mealType = chip.dataset.mt; draw(); });
+    });
+    content.querySelectorAll("#qtyChips .chip").forEach(chip => {
+      chip.addEventListener("click", () => { multiplier = parseFloat(chip.dataset.m); draw(); });
+    });
+    content.querySelector("#confirmAddFoodBtn").addEventListener("click", () => {
+      addFoodEntry(todayKey(), food, foodPickerState.mealType, multiplier);
+      showToast(`Added ${food.name} to ${MEAL_LABELS[foodPickerState.mealType]}`);
+      closeFoodModal();
+      if (document.getElementById("view-diet").classList.contains("active")) renderDiet();
+    });
+  }
+
+  draw();
+}
+
 /* ---------------- Library view ---------------- */
 let activeMuscleFilter = "all";
 function renderLibrary() {
@@ -377,12 +603,29 @@ function renderSettings() {
     };
   });
 
+  document.querySelectorAll("[data-cal]").forEach(el => {
+    el.classList.toggle("active", parseInt(el.dataset.cal, 10) === settings.calorieGoal);
+    el.onclick = () => {
+      settings.calorieGoal = parseInt(el.dataset.cal, 10);
+      saveJSON(STORE_KEYS.SETTINGS, settings);
+      renderSettings();
+    };
+  });
+
   document.getElementById("resetProgressBtn").onclick = () => {
     if (confirm("Reset all workout progress and streak? This can't be undone.")) {
       progress = {};
       saveJSON(STORE_KEYS.PROGRESS, progress);
       showToast("Progress reset");
       updateStreakPill();
+    }
+  };
+
+  document.getElementById("resetFoodLogBtn").onclick = () => {
+    if (confirm("Clear today's logged food? This can't be undone.")) {
+      delete foodLog[todayKey()];
+      saveJSON(STORE_KEYS.FOODLOG, foodLog);
+      showToast("Today's food log cleared");
     }
   };
 }
@@ -461,6 +704,11 @@ function closeModal() { document.getElementById("modalBackdrop").classList.remov
 document.getElementById("modalClose").addEventListener("click", closeModal);
 document.getElementById("modalBackdrop").addEventListener("click", (e) => {
   if (e.target.id === "modalBackdrop") closeModal();
+});
+
+document.getElementById("foodModalClose").addEventListener("click", closeFoodModal);
+document.getElementById("foodModalBackdrop").addEventListener("click", (e) => {
+  if (e.target.id === "foodModalBackdrop") closeFoodModal();
 });
 
 /* ---------------- Rest timer ---------------- */

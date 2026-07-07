@@ -41,6 +41,28 @@
       <div id="todayContent"></div>
     </section>
 
+    <!-- DIET VIEW -->
+    <section class="view" id="view-diet">
+      <h1 class="page-title">Diet</h1>
+      <p class="page-sub">South &amp; North Indian foods with clear calories and macros.</p>
+
+      <div class="card">
+        <div class="cal-summary">
+          <div class="cal-summary-num" id="calConsumed">0</div>
+          <div class="cal-summary-sub">of <span id="calGoalLabel">2000</span> kcal today</div>
+        </div>
+        <div class="progress-track"><div class="progress-fill" id="calProgressFill" style="width:0%"></div></div>
+        <div class="progress-label" id="calRemainingLabel">2000 kcal remaining</div>
+        <div class="macro-row" id="macroRow"></div>
+      </div>
+
+      <button class="btn btn-primary btn-block" id="openFoodPickerBtn">+ Add Food</button>
+
+      <div id="mealSections"></div>
+
+      <p class="disclaimer-note">Calories are approximate averages for typical home-style servings — actual values vary by recipe, oil/ghee used, and portion size.</p>
+    </section>
+
     <!-- WEEK VIEW -->
     <section class="view" id="view-week">
       <h1 class="page-title">This Week</h1>
@@ -110,6 +132,18 @@
             <div class="chip" data-rest="90">90s</div>
           </div>
         </div>
+        <div class="settings-row">
+          <div>
+            <div class="lbl">Daily calorie goal</div>
+            <div class="sub">Used on the Diet tab</div>
+          </div>
+          <div class="filter-row" style="margin:0;padding:0;">
+            <div class="chip" data-cal="1500">1500</div>
+            <div class="chip" data-cal="2000">2000</div>
+            <div class="chip" data-cal="2500">2500</div>
+            <div class="chip" data-cal="3000">3000</div>
+          </div>
+        </div>
       </div>
 
       <div class="section-label">Install on Your Phone</div>
@@ -120,8 +154,9 @@
       </div>
 
       <div class="section-label">Your Data</div>
-      <div class="card">
-        <button class="btn btn-danger btn-block" id="resetProgressBtn">Reset All Progress</button>
+      <div class="card" style="display:flex; flex-direction:column; gap:10px;">
+        <button class="btn btn-danger btn-block" id="resetProgressBtn">Reset Workout Progress</button>
+        <button class="btn btn-danger btn-block" id="resetFoodLogBtn">Reset Today's Food Log</button>
       </div>
 
       <div class="section-label">About</div>
@@ -149,6 +184,10 @@
       <button class="nav-btn active" data-view="today">
         <svg viewBox="0 0 24 24"><path d="M12 3v6l4 2"/><circle cx="12" cy="12" r="9"/></svg>
         Today
+      </button>
+      <button class="nav-btn" data-view="diet">
+        <svg viewBox="0 0 24 24"><path d="M6 2v8a3 3 0 0 0 3 3v9M6 2v6M9 2v6"/><path d="M18 2c-2 2-3 5-3 8s1 4 3 4v9"/></svg>
+        Diet
       </button>
       <button class="nav-btn" data-view="week">
         <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
@@ -178,10 +217,20 @@
     </div>
   </div>
 
+  <!-- Food picker modal -->
+  <div class="modal-backdrop" id="foodModalBackdrop">
+    <div class="modal-sheet" id="foodModalSheet" style="position:relative;">
+      <div class="modal-drag-handle"></div>
+      <button class="modal-close" id="foodModalClose">✕</button>
+      <div id="foodModalContent"></div>
+    </div>
+  </div>
+
 </div>
 
 <script src="data.js"></script>
 <script src="illustrations.js"></script>
+<script src="food-data.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

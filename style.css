@@ -354,17 +354,18 @@ p.page-sub {
   flex: 1;
   border: none;
   background: none;
-  padding: 10px 4px 8px;
+  padding: 9px 2px 7px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
+  gap: 2px;
   color: var(--text-dim);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   cursor: pointer;
+  min-width: 0;
 }
-.nav-btn svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 5.5; stroke-linecap: round; stroke-linejoin: round; }
+.nav-btn svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 5.5; stroke-linecap: round; stroke-linejoin: round; }
 .nav-btn.active { color: var(--accent-b); }
 
 /* ---------- Modal (exercise detail) ---------- */
@@ -572,3 +573,69 @@ p.page-sub {
 
 .empty-state { text-align: center; padding: 40px 20px; color: var(--text-dim); }
 .empty-state .emoji { font-size: 40px; margin-bottom: 10px; }
+
+/* ---------- Diet tab ---------- */
+.cal-summary { text-align: center; margin-bottom: 6px; }
+.cal-summary-num {
+  font-size: 40px;
+  font-weight: 800;
+  font-family: "Baloo 2", "Poppins", sans-serif;
+  background: var(--accent-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  line-height: 1.1;
+}
+.cal-summary-sub { font-size: 13px; color: var(--text-dim); }
+.macro-row { display: flex; gap: 10px; margin-top: 14px; }
+.macro-pill {
+  flex: 1;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  padding: 10px 8px;
+  text-align: center;
+}
+.macro-pill .v { display: block; font-weight: 800; font-size: 16px; color: var(--accent-a); }
+.macro-pill .l { display: block; font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .03em; margin-top: 2px; }
+
+.disclaimer-note { font-size: 12px; color: var(--text-dim); line-height: 1.5; margin-top: 4px; text-align: center; }
+
+.food-item, .food-log-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+.food-item { cursor: pointer; }
+.food-item .info, .food-log-item .info { flex: 1; min-width: 0; }
+.food-item .name, .food-log-item .name { font-weight: 700; font-size: 14px; }
+.food-log-item .name .mult { color: var(--accent-a); font-weight: 700; }
+.food-item .serving, .food-log-item .serving { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+.cuisine-tag { color: var(--accent-b); font-weight: 600; }
+.cal-badge {
+  font-weight: 800;
+  font-size: 13px;
+  color: white;
+  background: var(--accent-gradient);
+  padding: 6px 10px;
+  border-radius: 10px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.cal-badge span { display: block; font-size: 9px; font-weight: 600; opacity: .85; }
+.food-log-item .cal { font-weight: 700; font-size: 13px; color: var(--accent-a); flex-shrink: 0; }
+.food-remove {
+  border: none;
+  background: var(--surface-2);
+  color: var(--text-dim);
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  cursor: pointer;
+  flex-shrink: 0;
+  font-size: 12px;
+}
+.empty-meal { font-size: 13px; color: var(--text-dim); padding: 6px 2px; }

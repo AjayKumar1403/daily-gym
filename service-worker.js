@@ -1,5 +1,5 @@
 /* Daily Gym — offline-first service worker */
-const CACHE_NAME = "daily-gym-v1";
+const CACHE_NAME = "daily-gym-v2";
 const ASSETS = [
   "./",
   "./index.html",
@@ -7,6 +7,7 @@ const ASSETS = [
   "./app.js",
   "./data.js",
   "./illustrations.js",
+  "./food-data.js",
   "./manifest.json",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
