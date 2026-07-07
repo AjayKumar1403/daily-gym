@@ -1,98 +1,140 @@
 /* ==========================================================================
    Daily Gym — SVG illustrations
-   1) Body muscle map (front + back silhouette) with colorable regions
-   2) Simple stick-figure "pattern" icons per movement type
+   1) Posed figure engine — a simple forward-kinematics stick/capsule figure
+      drawn in the actual exercise position, with muscles colored directly
+      on the body segment being worked (primary / secondary / not targeted).
+   2) Small movement-pattern icons used on exercise list rows.
    ========================================================================== */
 
-/* ---- Body muscle map -----------------------------------------------------
-   Each region is a shape with a data-muscle name. renderBodyMap() colors
-   regions based on which muscles are passed as "primary" or "secondary".
----------------------------------------------------------------------------*/
+/* ---- Tiny forward-kinematics figure engine ------------------------------ */
 
-function bodyMapColor(muscle, primarySet, secondarySet) {
-  if (primarySet.has(muscle)) return "var(--muscle-primary)";
-  if (secondarySet.has(muscle)) return "var(--muscle-secondary)";
+const FIG = { torsoLen: 55, neckLen: 12, headR: 13, thighLen: 52, shinLen: 48, upperArmLen: 40, forearmLen: 36 };
+
+function deg2rad(d) { return (d * Math.PI) / 180; }
+
+function rotPoint(x, y, deg) {
+  const r = deg2rad(deg);
+  const cs = Math.cos(r), sn = Math.sin(r);
+  return [x * cs - y * sn, x * sn + y * cs];
+}
+
+// Computes all named joint keypoints for a pose descriptor.
+// Angles are defined in a canonical "standing" local frame, then the whole
+// figure is rotated by bodyRotation (0 = standing, 90 = lying on the floor)
+// around the hip root and translated to its position on the canvas.
+function computeFigure(pose) {
+  const {
+    torsoAngle = 0, hipAngle = 0, kneeAngle = 0,
+    shoulderAngle = 10, elbowAngle = 10,
+    bodyRotation = 0, rootX = 130, rootY = 125,
+    gluteOffset = [-15, 5], footFwd = 20
+  } = pose;
+
+  const hip = [0, 0];
+  const torsoVec = [Math.sin(deg2rad(torsoAngle)), -Math.cos(deg2rad(torsoAngle))];
+  const neck = [hip[0] + torsoVec[0] * FIG.torsoLen, hip[1] + torsoVec[1] * FIG.torsoLen];
+  const waist = [hip[0] + torsoVec[0] * FIG.torsoLen * 0.45, hip[1] + torsoVec[1] * FIG.torsoLen * 0.45];
+  const headBase = [neck[0] + torsoVec[0] * FIG.neckLen, neck[1] + torsoVec[1] * FIG.neckLen];
+  const head = [headBase[0] + torsoVec[0] * FIG.headR, headBase[1] + torsoVec[1] * FIG.headR];
+
+  const thighVec = [Math.sin(deg2rad(hipAngle)), Math.cos(deg2rad(hipAngle))];
+  const knee = [hip[0] + thighVec[0] * FIG.thighLen, hip[1] + thighVec[1] * FIG.thighLen];
+  const shinAngle = hipAngle - kneeAngle;
+  const shinVec = [Math.sin(deg2rad(shinAngle)), Math.cos(deg2rad(shinAngle))];
+  const ankle = [knee[0] + shinVec[0] * FIG.shinLen, knee[1] + shinVec[1] * FIG.shinLen];
+  const toe = [ankle[0] + footFwd, ankle[1] + 4];
+
+  const shoulder = neck;
+  const upperArmVec = [Math.sin(deg2rad(shoulderAngle)), Math.cos(deg2rad(shoulderAngle))];
+  const elbow = [shoulder[0] + upperArmVec[0] * FIG.upperArmLen, shoulder[1] + upperArmVec[1] * FIG.upperArmLen];
+  const foreArmAngle = shoulderAngle - elbowAngle;
+  const foreArmVec = [Math.sin(deg2rad(foreArmAngle)), Math.cos(deg2rad(foreArmAngle))];
+  const hand = [elbow[0] + foreArmVec[0] * FIG.forearmLen, elbow[1] + foreArmVec[1] * FIG.forearmLen];
+
+  const glute = [hip[0] + gluteOffset[0], hip[1] + gluteOffset[1]];
+
+  const raw = { head, neck, waist, hip, knee, ankle, toe, shoulder, elbow, hand, glute };
+  const out = {};
+  for (const k in raw) {
+    const [x, y] = rotPoint(raw[k][0], raw[k][1], bodyRotation);
+    out[k] = [x + rootX, y + rootY];
+  }
+  return out;
+}
+
+function resolveMuscleColor(options, primarySet, secondarySet) {
+  for (const m of options) if (primarySet.has(m)) return "var(--muscle-primary)";
+  for (const m of options) if (secondarySet.has(m)) return "var(--muscle-secondary)";
   return "var(--muscle-inactive)";
 }
 
-function renderBodyMap(view, primary, secondary) {
-  const primarySet = new Set(primary || []);
-  const secondarySet = new Set(secondary || []);
-  const c = (m) => bodyMapColor(m, primarySet, secondarySet);
+function segLine(p1, p2, w, color) {
+  return `<line x1="${p1[0].toFixed(1)}" y1="${p1[1].toFixed(1)}" x2="${p2[0].toFixed(1)}" y2="${p2[1].toFixed(1)}" stroke="${color}" stroke-width="${w}" stroke-linecap="round"/>`;
+}
+function segDot(p, r, color) {
+  return `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="${r}" fill="${color}"/>`;
+}
 
-  if (view === "front") {
-    return `
-<svg viewBox="0 0 200 400" xmlns="http://www.w3.org/2000/svg" class="body-map" aria-label="Front body muscle map">
-  <!-- head -->
-  <circle cx="100" cy="28" r="20" fill="var(--muscle-inactive)"/>
-  <!-- neck -->
-  <rect x="92" y="46" width="16" height="14" fill="var(--muscle-inactive)"/>
-  <!-- shoulders -->
-  <ellipse data-muscle="shoulders" cx="62" cy="70" rx="18" ry="14" fill="${c('shoulders')}"/>
-  <ellipse data-muscle="shoulders" cx="138" cy="70" rx="18" ry="14" fill="${c('shoulders')}"/>
-  <!-- chest -->
-  <rect data-muscle="chest" x="72" y="66" width="56" height="46" rx="12" fill="${c('chest')}"/>
-  <!-- biceps -->
-  <rect data-muscle="biceps" x="42" y="86" width="16" height="46" rx="8" fill="${c('biceps')}"/>
-  <rect data-muscle="biceps" x="142" y="86" width="16" height="46" rx="8" fill="${c('biceps')}"/>
-  <!-- forearms (inactive) -->
-  <rect x="40" y="134" width="14" height="42" rx="7" fill="var(--muscle-inactive)"/>
-  <rect x="146" y="134" width="14" height="42" rx="7" fill="var(--muscle-inactive)"/>
-  <!-- abs -->
-  <rect data-muscle="abs" x="80" y="114" width="40" height="56" rx="8" fill="${c('abs')}"/>
-  <!-- obliques -->
-  <rect data-muscle="obliques" x="66" y="118" width="14" height="48" rx="6" fill="${c('obliques')}"/>
-  <rect data-muscle="obliques" x="120" y="118" width="14" height="48" rx="6" fill="${c('obliques')}"/>
-  <!-- quads -->
-  <rect data-muscle="quads" x="76" y="176" width="20" height="70" rx="9" fill="${c('quads')}"/>
-  <rect data-muscle="quads" x="104" y="176" width="20" height="70" rx="9" fill="${c('quads')}"/>
-  <!-- calves (front / shin) -->
-  <rect data-muscle="calves" x="78" y="250" width="16" height="60" rx="7" fill="${c('calves')}"/>
-  <rect data-muscle="calves" x="106" y="250" width="16" height="60" rx="7" fill="${c('calves')}"/>
-  <!-- feet -->
-  <ellipse cx="86" cy="320" rx="14" ry="8" fill="var(--muscle-inactive)"/>
-  <ellipse cx="114" cy="320" rx="14" ry="8" fill="var(--muscle-inactive)"/>
-</svg>`;
-  }
+/* Per-exercise pose parameters. bodyRotation 0 = standing, 90 = on the floor. */
+const POSES = {
+  squat:          { torsoAngle: 20, hipAngle: 65, kneeAngle: 95, shoulderAngle: 75, elbowAngle: 15, rootY: 150 },
+  pushup:         { bodyRotation: 90, shoulderAngle: 80, elbowAngle: 70, rootY: 110, footFwd: 14 },
+  glutebridge:    { bodyRotation: 90, hipAngle: 50, kneeAngle: 90, shoulderAngle: 95, elbowAngle: 5, rootY: 115, footFwd: 10 },
+  row:            { torsoAngle: 55, hipAngle: 15, kneeAngle: 15, shoulderAngle: 80, elbowAngle: 25, rootY: 125 },
+  plank:          { bodyRotation: 90, shoulderAngle: 80, elbowAngle: 90, rootY: 120, footFwd: 14 },
+  lunge:          { torsoAngle: 10, hipAngle: 40, kneeAngle: 90, shoulderAngle: 20, elbowAngle: 20, rootY: 135 },
+  ohp:            { shoulderAngle: 175, elbowAngle: 10, rootY: 120 },
+  superman:       { bodyRotation: 90, hipAngle: -10, shoulderAngle: 170, elbowAngle: 0, rootY: 120 },
+  mountainclimber:{ bodyRotation: 90, hipAngle: -60, kneeAngle: 100, shoulderAngle: 80, elbowAngle: 70, rootY: 120, footFwd: 10 },
+  bicepcurl:      { shoulderAngle: 15, elbowAngle: 110, rootY: 120 },
+  tricepdip:      { torsoAngle: 10, hipAngle: 80, kneeAngle: 90, shoulderAngle: -20, elbowAngle: 90, rootY: 150 },
+  sideplank:      { bodyRotation: 90, shoulderAngle: 85, elbowAngle: 80, rootY: 120, footFwd: 12 },
+  stepup:         { torsoAngle: 5, hipAngle: 75, kneeAngle: 95, shoulderAngle: 10, elbowAngle: 15, rootY: 130 },
+  birddog:        { bodyRotation: 90, hipAngle: -30, kneeAngle: 10, shoulderAngle: 170, elbowAngle: 5, rootY: 115, footFwd: 20 },
+  calfraise:      { kneeAngle: 5, shoulderAngle: 10, elbowAngle: 10, rootY: 118, footFwd: 10 },
+  deadlift:       { torsoAngle: 45, hipAngle: 10, kneeAngle: 10, shoulderAngle: 5, elbowAngle: 5, rootY: 125 },
+  burpee:         { shoulderAngle: 170, elbowAngle: 5, rootY: 110, footFwd: 15 },
+  russiantwist:   { torsoAngle: -25, hipAngle: 80, kneeAngle: 95, shoulderAngle: 40, elbowAngle: 60, rootY: 150 },
+  wallsit:        { hipAngle: 85, kneeAngle: 90, shoulderAngle: 0, elbowAngle: 5, rootY: 145 },
+  bandpull:       { shoulderAngle: 30, elbowAngle: 100, rootY: 120 },
+  chestfly:       { bodyRotation: 90, shoulderAngle: 100, elbowAngle: 15, rootY: 120, footFwd: 15 },
+  highknees:      { torsoAngle: 5, hipAngle: 85, kneeAngle: 100, shoulderAngle: 60, elbowAngle: 90, rootY: 125 },
+  reverselunge:   { torsoAngle: 8, hipAngle: 35, kneeAngle: 80, shoulderAngle: 15, elbowAngle: 15, rootY: 133 },
+  deadbug:        { bodyRotation: 90, hipAngle: -20, kneeAngle: 10, shoulderAngle: 160, elbowAngle: 5, rootY: 120, footFwd: 22 }
+};
 
-  // back view
+function renderPoseFigure(exId) {
+  const ex = EXERCISES[exId];
+  const pose = POSES[exId] || {};
+  const primarySet = new Set(ex.muscles.primary);
+  const secondarySet = new Set(ex.muscles.secondary);
+  const pts = computeFigure(pose);
+  const inactive = "var(--muscle-inactive)";
+
+  const cTorsoUpper = resolveMuscleColor(["chest", "back"], primarySet, secondarySet);
+  const cTorsoLower = resolveMuscleColor(["abs", "obliques", "lowerback"], primarySet, secondarySet);
+  const cShoulder = resolveMuscleColor(["shoulders"], primarySet, secondarySet);
+  const cArm = resolveMuscleColor(["biceps", "triceps"], primarySet, secondarySet);
+  const cGlute = resolveMuscleColor(["glutes"], primarySet, secondarySet);
+  const cThigh = resolveMuscleColor(["quads", "hamstrings"], primarySet, secondarySet);
+  const cShin = resolveMuscleColor(["calves"], primarySet, secondarySet);
+
   return `
-<svg viewBox="0 0 200 400" xmlns="http://www.w3.org/2000/svg" class="body-map" aria-label="Back body muscle map">
-  <!-- head -->
-  <circle cx="100" cy="28" r="20" fill="var(--muscle-inactive)"/>
-  <!-- neck -->
-  <rect x="92" y="46" width="16" height="14" fill="var(--muscle-inactive)"/>
-  <!-- shoulders (rear delts) -->
-  <ellipse data-muscle="shoulders" cx="62" cy="70" rx="18" ry="14" fill="${c('shoulders')}"/>
-  <ellipse data-muscle="shoulders" cx="138" cy="70" rx="18" ry="14" fill="${c('shoulders')}"/>
-  <!-- upper back / lats -->
-  <rect data-muscle="back" x="72" y="66" width="56" height="46" rx="12" fill="${c('back')}"/>
-  <!-- triceps -->
-  <rect data-muscle="triceps" x="42" y="86" width="16" height="46" rx="8" fill="${c('triceps')}"/>
-  <rect data-muscle="triceps" x="142" y="86" width="16" height="46" rx="8" fill="${c('triceps')}"/>
-  <!-- forearms (inactive) -->
-  <rect x="40" y="134" width="14" height="42" rx="7" fill="var(--muscle-inactive)"/>
-  <rect x="146" y="134" width="14" height="42" rx="7" fill="var(--muscle-inactive)"/>
-  <!-- lower back -->
-  <rect data-muscle="lowerback" x="80" y="114" width="40" height="34" rx="8" fill="${c('lowerback')}"/>
-  <!-- glutes -->
-  <ellipse data-muscle="glutes" cx="88" cy="164" rx="18" ry="18" fill="${c('glutes')}"/>
-  <ellipse data-muscle="glutes" cx="112" cy="164" rx="18" ry="18" fill="${c('glutes')}"/>
-  <!-- hamstrings -->
-  <rect data-muscle="hamstrings" x="76" y="184" width="20" height="62" rx="9" fill="${c('hamstrings')}"/>
-  <rect data-muscle="hamstrings" x="104" y="184" width="20" height="62" rx="9" fill="${c('hamstrings')}"/>
-  <!-- calves -->
-  <rect data-muscle="calves" x="78" y="250" width="16" height="60" rx="7" fill="${c('calves')}"/>
-  <rect data-muscle="calves" x="106" y="250" width="16" height="60" rx="7" fill="${c('calves')}"/>
-  <!-- feet -->
-  <ellipse cx="86" cy="320" rx="14" ry="8" fill="var(--muscle-inactive)"/>
-  <ellipse cx="114" cy="320" rx="14" ry="8" fill="var(--muscle-inactive)"/>
+<svg viewBox="0 0 260 210" xmlns="http://www.w3.org/2000/svg" class="pose-figure" aria-label="${ex.name} illustration">
+  ${segLine(pts.hip, pts.knee, 20, cThigh)}
+  ${segLine(pts.knee, pts.ankle, 15, cShin)}
+  ${segLine(pts.ankle, pts.toe, 11, inactive)}
+  ${segLine(pts.waist, pts.hip, 20, cTorsoLower)}
+  ${segLine(pts.neck, pts.waist, 24, cTorsoUpper)}
+  ${segDot(pts.glute, 15, cGlute)}
+  ${segLine(pts.shoulder, pts.elbow, 15, cArm)}
+  ${segLine(pts.elbow, pts.hand, 13, inactive)}
+  ${segDot(pts.shoulder, 11, cShoulder)}
+  ${segDot(pts.head, FIG.headR, inactive)}
 </svg>`;
 }
 
-/* ---- Movement pattern stick-figure icons --------------------------------
-   Simple, consistent line-art icons shown on exercise cards.
----------------------------------------------------------------------------*/
+/* ---- Small movement pattern icons (used on exercise list rows) ---------- */
 
 const PATTERN_ICONS = {
   squat: `<svg viewBox="0 0 100 100"><circle cx="50" cy="18" r="8"/><path d="M50 26 L50 50 M50 50 L34 66 M50 50 L66 66 M34 66 L30 84 M66 66 L70 84 M38 40 L20 52 M62 40 L80 52"/></svg>`,

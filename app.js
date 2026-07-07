@@ -392,10 +392,8 @@ function applyTheme() {
 }
 
 /* ---------------- Exercise detail modal ---------------- */
-let modalBodyView = "front";
 function openExerciseModal(exId, ctx) {
   const ex = EXERCISES[exId];
-  modalBodyView = ex.muscles.primary.some(m => ["back", "lowerback", "glutes", "hamstrings", "triceps"].includes(m)) ? "back" : "front";
   renderExerciseModal(ex, ctx || {});
   openModal();
 }
@@ -419,11 +417,7 @@ function renderExerciseModal(ex, ctx) {
       <span class="tag">${dose}</span>
     </div>
 
-    <div class="view-toggle">
-      <button data-v="front" class="${modalBodyView === "front" ? "active" : ""}">Front</button>
-      <button data-v="back" class="${modalBodyView === "back" ? "active" : ""}">Back</button>
-    </div>
-    <div class="body-map-wrap" id="bodyMapWrap"></div>
+    <div class="body-map-wrap">${renderPoseFigure(ex.id)}</div>
     <div class="legend">
       <span><i style="background:var(--muscle-primary)"></i>Primary</span>
       <span><i style="background:var(--muscle-secondary)"></i>Secondary</span>
@@ -449,16 +443,6 @@ function renderExerciseModal(ex, ctx) {
     ${checkBtn ? `<div style="margin-top:10px;">${checkBtn}</div>` : ""}
   `;
 
-  renderBodyMapInto(ex);
-
-  modalContent.querySelectorAll(".view-toggle button").forEach(btn => {
-    btn.addEventListener("click", () => {
-      modalBodyView = btn.dataset.v;
-      modalContent.querySelectorAll(".view-toggle button").forEach(b => b.classList.toggle("active", b === btn));
-      renderBodyMapInto(ex);
-    });
-  });
-
   document.getElementById("modalTimerBtn").addEventListener("click", () => startRestTimer(settings.restLength));
 
   const doneBtn = document.getElementById("modalDoneBtn");
@@ -469,10 +453,6 @@ function renderExerciseModal(ex, ctx) {
       if (document.getElementById("view-today").classList.contains("active")) renderToday();
     });
   }
-}
-
-function renderBodyMapInto(ex) {
-  document.getElementById("bodyMapWrap").innerHTML = renderBodyMap(modalBodyView, ex.muscles.primary, ex.muscles.secondary);
 }
 
 /* ---------------- Modal open/close ---------------- */
