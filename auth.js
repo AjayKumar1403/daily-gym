@@ -109,9 +109,22 @@ function setGateStatus(msg, isError) {
 document.getElementById("googleSignInBtn").addEventListener("click", () => {
   const provider = new firebase.auth.GoogleAuthProvider();
   setGateStatus("Signing in…");
+  // Try a popup first (nicer UX, stays on this tab in the background);
+  // fall back to a full-page redirect if the popup gets blocked/closed,
+  // which happens in some embedded/automated browser contexts.
   auth.signInWithPopup(provider).catch((err) => {
-    setGateStatus(err.code === "auth/popup-closed-by-user" ? "" : "Sign-in failed. Please try again.", true);
+    if (err.code === "auth/popup-closed-by-user" || err.code === "auth/popup-blocked" || err.code === "auth/cancelled-popup-request") {
+      setGateStatus("Redirecting to Google sign-in…");
+      auth.signInWithRedirect(provider);
+    } else {
+      setGateStatus("Sign-in failed. Please try again.", true);
+    }
   });
+});
+
+/* Handle the return trip from signInWithRedirect, if that path was used. */
+auth.getRedirectResult().catch((err) => {
+  if (err && err.code) setGateStatus("Sign-in failed: " + err.code, true);
 });
 
 auth.onAuthStateChanged(async (user) => {
