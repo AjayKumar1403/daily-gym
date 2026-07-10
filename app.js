@@ -13,6 +13,7 @@ function loadJSON(key, fallback) {
 }
 function saveJSON(key, val) {
   try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) { /* storage unavailable */ }
+  if (typeof scheduleCloudSync === "function") scheduleCloudSync();
 }
 
 let progress = loadJSON(STORE_KEYS.PROGRESS, {});
@@ -846,6 +847,10 @@ function renderLearn() {
 
 /* ---------------- Settings view ---------------- */
 function renderSettings() {
+  if (typeof updateAccountRow === "function") updateAccountRow();
+  const signOutBtn = document.getElementById("signOutBtn");
+  if (signOutBtn) signOutBtn.onclick = () => { if (typeof signOutUser === "function") signOutUser(); };
+
   const darkSwitch = document.getElementById("darkModeSwitch");
   darkSwitch.classList.toggle("on", settings.darkMode);
   darkSwitch.onclick = () => {
@@ -1015,18 +1020,32 @@ document.getElementById("timerCancel").addEventListener("click", () => {
   document.getElementById("timerWidget").classList.add("hidden");
 });
 
-/* ---------------- Init ---------------- */
+/* ---------------- Init ----------------
+   initAppUI() is called by auth.js once the user is signed in and their
+   cloud data (if any) has been loaded — not automatically on script load,
+   since the app is gated behind sign-in. */
 applyTheme();
-switchView("today");
 
-if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js").catch(() => {});
-  });
+let appUIStarted = false;
+function initAppUI() {
+  if (appUIStarted) { switchView(currentActiveView() || "today"); return; }
+  appUIStarted = true;
+  switchView("today");
+
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("service-worker.js").catch(() => {});
+    });
+  }
+
+  /* Reminder scheduler — checks every 20s and once immediately, catching up
+     on anything due since the app was last opened. Only fires while this
+     page/tab is open; see the note on the Reminders tab for why. */
+  checkReminders();
+  setInterval(checkReminders, 20000);
 }
 
-/* Reminder scheduler — checks every 20s and once immediately, catching up
-   on anything due since the app was last opened. Only fires while this
-   page/tab is open; see the note on the Reminders tab for why. */
-checkReminders();
-setInterval(checkReminders, 20000);
+function currentActiveView() {
+  const active = document.querySelector(".nav-btn.active");
+  return active ? active.dataset.view : null;
+}
